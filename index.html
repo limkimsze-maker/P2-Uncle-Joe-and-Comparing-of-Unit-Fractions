@@ -1942,6 +1942,7 @@
     opacity:.96;
     transform:scale(1.04);
     box-shadow:0 18px 35px rgba(17,24,39,.24);
+    cursor:grabbing;
   }
   .tile-placeholder{
     background:#e0f2fe;
@@ -2347,7 +2348,7 @@
 
 
 
-  /* Touch-friendly draggable/tappable ordering tiles */
+  /* Pointer-friendly draggable/tappable ordering tiles: mouse, pen, and touch use the same lifted tile response. */
   let selectedReorderTile = null;
   function clearSelectedReorderTile(){
     if(selectedReorderTile) selectedReorderTile.classList.remove(&#x27;tile-selected&#x27;);
@@ -2365,14 +2366,21 @@
       if(movedByPointer){ movedByPointer = false; return; }
       const parent = tile.parentElement;
       if(!parent || !parent.classList.contains(&#x27;sortable&#x27;)) return;
-      if(!selectedReorderTile || selectedReorderTile.parentElement !== parent){
-        clearSelectedReorderTile();
+      if(!selectedReorderTile){
         selectedReorderTile = tile;
         tile.classList.add(&#x27;tile-selected&#x27;);
         return;
       }
       if(selectedReorderTile === tile){
         clearSelectedReorderTile();
+        return;
+      }
+      if(selectedReorderTile.parentElement !== parent){
+        /* Keep reordering inside one question only. If the pupil taps a tile in another
+           question, start a new selection instead of moving the first tile across. */
+        clearSelectedReorderTile();
+        selectedReorderTile = tile;
+        tile.classList.add(&#x27;tile-selected&#x27;);
         return;
       }
       parent.insertBefore(selectedReorderTile, tile.nextSibling);
@@ -2382,7 +2390,6 @@
 
     tile.addEventListener(&#x27;pointerdown&#x27;, function(e){
       if(e.button &amp;&amp; e.button !== 0) return;
-      if(e.pointerType === &#x27;mouse&#x27;) return; // desktop keeps native drag/drop
       const originalParent = tile.parentElement;
       if(!originalParent || !originalParent.classList.contains(&#x27;sortable&#x27;)) return;
 
@@ -2414,12 +2421,13 @@
         tile.style.top = `${clientY - offsetY}px`;
         const el = document.elementFromPoint(clientX, clientY);
         const target = el &amp;&amp; el.closest ? el.closest(&#x27;.tile:not(.touch-dragging):not(.tile-placeholder)&#x27;) : null;
-        if(target &amp;&amp; target.parentElement &amp;&amp; target.parentElement.classList.contains(&#x27;sortable&#x27;)){
+        if(target &amp;&amp; target.parentElement === originalParent){
+          /* Mobile drag must stay inside this question&#x27;s own sortable area. */
           const rect = target.getBoundingClientRect();
           const sameRow = clientY &gt;= rect.top &amp;&amp; clientY &lt;= rect.bottom;
           const before = sameRow ? (clientX &lt; rect.left + rect.width / 2) : (clientY &lt; rect.top + rect.height / 2);
-          if(before) target.parentElement.insertBefore(placeholder, target);
-          else target.parentElement.insertBefore(placeholder, target.nextSibling);
+          if(before) originalParent.insertBefore(placeholder, target);
+          else originalParent.insertBefore(placeholder, target.nextSibling);
         }
       }
       function finish(){
@@ -2443,7 +2451,7 @@
   }
 
   function makeTile(n,d, includePics=true, onDragChange){
-    const t=document.createElement(&#x27;div&#x27;); t.className=&#x27;tile&#x27;; t.draggable=true; t.dataset.num=String(n); t.dataset.den=String(d); t.id=uid(&#x27;tile&#x27;);
+    const t=document.createElement(&#x27;div&#x27;); t.className=&#x27;tile&#x27;; t.draggable=false; t.dataset.num=String(n); t.dataset.den=String(d); t.id=uid(&#x27;tile&#x27;);
     t.innerHTML = `&lt;div class=&quot;label&quot;&gt;${fracHTML(n,d)}&lt;/div&gt;${includePics?`&lt;div class=&quot;pic-wrap&quot; data-role=&quot;pict&quot; data-num=&quot;${n}&quot; data-den=&quot;${d}&quot;&gt;${renderPic(n,d)}&lt;/div&gt;`:&#x27;&#x27;}`;
     t.addEventListener(&#x27;dragstart&#x27;, e=&gt;{ t.classList.add(&#x27;dragging&#x27;); e.dataTransfer.setData(&#x27;text/plain&#x27;, t.id); e.dataTransfer.effectAllowed=&#x27;move&#x27;; });
     t.addEventListener(&#x27;dragend&#x27;, ()=&gt; t.classList.remove(&#x27;dragging&#x27;));
@@ -2451,8 +2459,9 @@
     t.addEventListener(&#x27;drop&#x27;, e=&gt;{
       e.preventDefault();
       const dragId=e.dataTransfer.getData(&#x27;text/plain&#x27;); const dragEl=document.getElementById(dragId);
-      if(!dragEl||dragEl===t) return;
-      const rect=t.getBoundingClientRect(); const before=e.clientX&lt;rect.left+rect.width/2; const parent=t.parentElement;
+      const parent=t.parentElement;
+      if(!dragEl || dragEl===t || dragEl.parentElement !== parent) return;
+      const rect=t.getBoundingClientRect(); const before=e.clientX&lt;rect.left+rect.width/2;
       if(before) parent.insertBefore(dragEl,t); else parent.insertBefore(dragEl,t.nextSibling);
       if(typeof onDragChange===&#x27;function&#x27;) onDragChange();
     });
@@ -2474,8 +2483,11 @@
     shuffle(fracs.slice()).forEach(([n,d])=&gt;cont.appendChild(makeTile(n,d, includePics, notifyAnswered)));
     cont.addEventListener(&#x27;dragover&#x27;, e=&gt;{ e.preventDefault(); e.dataTransfer.dropEffect=&#x27;move&#x27;; });
     cont.addEventListener(&#x27;drop&#x27;, e=&gt;{ e.preventDefault(); const dragId=e.dataTransfer.getData(&#x27;text/plain&#x27;); const dragEl=document.getElementById(dragId);
-      if(dragEl &amp;&amp; dragEl.parentElement!==cont) cont.appendChild(dragEl);
-      if(forTest) markAnswered(card);
+      if(dragEl &amp;&amp; dragEl.parentElement===cont){
+        cont.appendChild(dragEl);
+        if(forTest) markAnswered(card);
+      }
+      /* If the dragged tile came from another question, ignore the drop. */
     });
 
     card.appendChild(instr); card.appendChild(cont);
