@@ -214,6 +214,7 @@
       left:12px;
       top:calc(78px + var(--safeTop));
       z-index:15;
+      display:none;
       width:min(350px,calc(100vw - 24px));
       padding:12px 14px;
       border-radius:18px;
@@ -4489,12 +4490,6 @@
 
       showMessage("Guide Space Max to Rae. Press E near Rae to hear their conversation and the unit-fraction idea.", 5600);
       setMission("Find Rae");
-
-      setTimeout(()=>{
-        if(started && !chamberOpen && !modalShade.classList.contains("open")){
-          showMessage("Control tip: use WASD / arrow keys, or tap and hold the on-screen arrows. The E button talks to Rae or activates Rae's computer.", 5200);
-        }
-      }, 4500);
     }
 
     function resize(){
